@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -31,7 +30,7 @@ var resolveCmd = &cobra.Command{
 
 		provider := chrome.NewProvider(nil)
 
-		release, err := provider.Resolve(context.Background(), browserVersion, currentPlatform)
+		release, err := provider.Resolve(cmd.Context(), browserVersion, currentPlatform)
 		if err != nil {
 			return err
 		}
@@ -48,8 +47,16 @@ var resolveCmd = &cobra.Command{
 func parseBrowserVersion(value string) (string, string, error) {
 	parts := strings.SplitN(value, "@", 2)
 
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid browser version %q, expected <browser>@<version>", value)
+	if len(parts) == 1 {
+		if parts[0] == "" {
+			return "", "", fmt.Errorf("browser name cannot be empty")
+		}
+
+		return parts[0], "", nil
+	}
+
+	if parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid browser version %q, expected <browser>[@<version>]", value)
 	}
 
 	return parts[0], parts[1], nil

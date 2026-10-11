@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -15,12 +16,11 @@ var rootCmd = &cobra.Command{
 Install, manage and run multiple browser versions locally.`,
 }
 
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+func Execute(ctx context.Context) error {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		_, err = fmt.Fprintln(os.Stderr, err)
-		if err != nil {
-			return
-		}
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
