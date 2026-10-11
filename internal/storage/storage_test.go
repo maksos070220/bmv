@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -127,5 +128,58 @@ func TestStorage_ListInstalledVersionsIgnoresFiles(t *testing.T) {
 
 	if len(got) != 0 {
 		t.Errorf("ListInstalledVersions() = %v, want empty slice", got)
+	}
+}
+
+func TestStorage_RemoveInstalledVersion(t *testing.T) {
+	storage := New(t.TempDir())
+	version := "120.0.6099.109"
+
+	path := storage.BrowserPath(browser.Chrome, version)
+
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatalf("MkdirAll(): %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(path, "chrome"), []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile(): %v", err)
+	}
+
+	if err := storage.RemoveInstalledVersion(browser.Chrome, version); err != nil {
+		t.Fatalf("RemoveInstalledVersion() error = %v", err)
+	}
+
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("installation directory still exists: %v", err)
+	}
+}
+
+func TestStorage_RemoveInstalledVersionNotInstalled(t *testing.T) {
+	storage := New(t.TempDir())
+
+	err := storage.RemoveInstalledVersion(browser.Chrome, "120.0.6099.109")
+
+	if err == nil {
+		t.Fatal("RemoveInstalledVersion() error = nil, want error")
+	}
+}
+
+func TestStorage_RemoveInstalledVersionRejectsInvalidVersion(t *testing.T) {
+	storage := New(t.TempDir())
+
+	for _, version := range []string{
+		"",
+		".",
+		"..",
+		"../../important-data",
+		`..\important-data`,
+	} {
+		t.Run(version, func(t *testing.T) {
+			err := storage.RemoveInstalledVersion(browser.Chrome, version)
+
+			if err == nil {
+				t.Fatalf("RemoveInstalledVersion(%q) error = nil, want error", version)
+			}
+		})
 	}
 }

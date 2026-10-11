@@ -94,6 +94,14 @@ func (m *mockStorage) ListInstalledVersions(b browser.Browser) ([]string, error)
 	return m.versions, m.listErr
 }
 
+func (m *mockStorage) RemoveInstalledVersion(b browser.Browser, version string) error {
+	if m.listErr != nil {
+		return m.listErr
+	}
+
+	return nil
+}
+
 func TestBrowserService_Install(t *testing.T) {
 	ctx := context.Background()
 
@@ -462,5 +470,38 @@ func TestBrowserService_ListInstalledVersions(t *testing.T) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ListInstalledVersions() = %v, want %v", got, want)
+	}
+}
+
+func TestBrowserService_Uninstall(t *testing.T) {
+	release := &browser.Release{
+		Browser: browser.Chrome,
+		Version: "120.0.1.2",
+		Platform: browser.Platform{
+			OS:           "linux",
+			Architecture: "amd64",
+		},
+		DownloadURL: "https://example.com/chrome.zip",
+	}
+
+	provider := &mockProvider{
+		release: release,
+	}
+
+	providers := &mockProviderRegistry{
+		provider: provider,
+	}
+
+	downloader := &mockDownloader{}
+	installer := &mockInstaller{}
+	storage := &mockStorage{
+		root: t.TempDir(),
+	}
+
+	svc := NewBrowserService(providers, downloader, installer, storage)
+
+	err := svc.Uninstall(browser.Chrome, "120.0.6099.109")
+	if err != nil {
+		t.Fatalf("Uninstall() error = %v", err)
 	}
 }
