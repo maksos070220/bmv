@@ -21,6 +21,7 @@ type Storage interface {
 	BrowserPath(b browser.Browser, version string) string
 	DownloadsPath() string
 	IsInstalled(browser browser.Browser, version string) bool
+	ListInstalledVersions(b browser.Browser) ([]string, error)
 }
 
 type ProviderRegistry interface {
@@ -83,4 +84,13 @@ func (s *BrowserService) Install(ctx context.Context, b browser.Browser, version
 	}
 
 	return release, nil
+}
+
+func (s *BrowserService) ListInstalledVersions(b browser.Browser) ([]string, error) {
+	versions, err := s.storage.ListInstalledVersions(b)
+	if err != nil {
+		return nil, fmt.Errorf("list installed browser versions: %w", err)
+	}
+
+	return versions, nil
 }

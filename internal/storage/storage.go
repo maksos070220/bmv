@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/maksos070220/bmv/internal/browser"
 )
@@ -52,4 +53,31 @@ func (s *Storage) IsInstalled(b browser.Browser, version string) bool {
 	}
 
 	return info.IsDir()
+}
+
+func (s *Storage) ListInstalledVersions(b browser.Browser) ([]string, error) {
+	dir := filepath.Join(s.root, "browsers", string(b))
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+
+		return nil, fmt.Errorf("read installed browser versions: %w", err)
+	}
+
+	versions := make([]string, 0, len(entries))
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		versions = append(versions, entry.Name())
+	}
+
+	sort.Strings(versions)
+
+	return versions, nil
 }

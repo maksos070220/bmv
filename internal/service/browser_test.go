@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/maksos070220/bmv/internal/browser"
@@ -73,6 +74,8 @@ func (m *mockInstaller) Install(archivePath string, destination string) error {
 type mockStorage struct {
 	root      string
 	installed bool
+	versions  []string
+	listErr   error
 }
 
 func (m *mockStorage) BrowserPath(b browser.Browser, version string) string {
@@ -85,6 +88,10 @@ func (m *mockStorage) DownloadsPath() string {
 
 func (m *mockStorage) IsInstalled(b browser.Browser, version string) bool {
 	return m.installed
+}
+
+func (m *mockStorage) ListInstalledVersions(b browser.Browser) ([]string, error) {
+	return m.versions, m.listErr
 }
 
 func TestBrowserService_Install(t *testing.T) {
@@ -412,5 +419,48 @@ func TestBrowserService_InstallCancelledContext(t *testing.T) {
 
 	if installer.calls != 0 {
 		t.Errorf("Installer calls = %d, want 0", installer.calls)
+	}
+}
+
+func TestBrowserService_ListInstalledVersions(t *testing.T) {
+	want := []string{
+		"120.0.6099.109",
+		"131.0.6778.204",
+	}
+
+	release := &browser.Release{
+		Browser: browser.Chrome,
+		Version: "120.0.1.2",
+		Platform: browser.Platform{
+			OS:           "linux",
+			Architecture: "amd64",
+		},
+		DownloadURL: "https://example.com/chrome.zip",
+	}
+
+	provider := &mockProvider{
+		release: release,
+	}
+
+	providers := &mockProviderRegistry{
+		provider: provider,
+	}
+
+	downloader := &mockDownloader{}
+	installer := &mockInstaller{}
+	storage := &mockStorage{
+		root:     t.TempDir(),
+		versions: want,
+	}
+
+	svc := NewBrowserService(providers, downloader, installer, storage)
+
+	got, err := svc.ListInstalledVersions(browser.Chrome)
+	if err != nil {
+		t.Fatalf("ListInstalledVersions() error = %v", err)
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ListInstalledVersions() = %v, want %v", got, want)
 	}
 }
