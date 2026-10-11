@@ -55,16 +55,15 @@ var installCmd = &cobra.Command{
 			},
 		)
 
+		if err != nil {
+			return fmt.Errorf("install browser: %w", err)
+		}
+
 		if _, err := fmt.Fprintln(out); err != nil {
 			return err
 		}
 
-		_, err = fmt.Fprintf(
-			out,
-			"Installed %s %s\n",
-			release.Browser,
-			release.Version,
-		)
+		_, err = fmt.Fprintf(out, "Installed %s %s\n", release.Browser, release.Version)
 
 		return err
 	},
