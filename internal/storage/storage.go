@@ -1,10 +1,12 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/maksos070220/bmv/internal/browser"
 )
@@ -80,4 +82,35 @@ func (s *Storage) ListInstalledVersions(b browser.Browser) ([]string, error) {
 	sort.Strings(versions)
 
 	return versions, nil
+}
+
+func (s *Storage) RemoveInstalledVersion(b browser.Browser, version string) error {
+	if version == "" || version == "." || version == ".." || strings.ContainsAny(version, `/\`) {
+		return fmt.Errorf("invalid browser version %q", version)
+	}
+
+	path := s.BrowserPath(b, version)
+
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("browser %s version %s is not installed", b, version)
+		}
+
+		return fmt.Errorf("inspect browser installation: %w", err)
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("browser installation path is a symbolic link")
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("browser installation path is not a directory")
+	}
+
+	if err = os.RemoveAll(path); err != nil {
+		return fmt.Errorf("remove browser installation: %w", err)
+	}
+
+	return nil
 }

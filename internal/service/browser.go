@@ -22,6 +22,7 @@ type Storage interface {
 	DownloadsPath() string
 	IsInstalled(browser browser.Browser, version string) bool
 	ListInstalledVersions(b browser.Browser) ([]string, error)
+	RemoveInstalledVersion(b browser.Browser, version string) error
 }
 
 type ProviderRegistry interface {
@@ -93,4 +94,12 @@ func (s *BrowserService) ListInstalledVersions(b browser.Browser) ([]string, err
 	}
 
 	return versions, nil
+}
+
+func (s *BrowserService) Uninstall(b browser.Browser, version string) error {
+	if err := s.storage.RemoveInstalledVersion(b, version); err != nil {
+		return fmt.Errorf("uninstall browser: %w", err)
+	}
+
+	return nil
 }
