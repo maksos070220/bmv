@@ -7,6 +7,7 @@ import (
 	"github.com/maksos070220/bmv/internal/installer"
 	"github.com/maksos070220/bmv/internal/providers/chrome"
 	"github.com/maksos070220/bmv/internal/registry"
+	"github.com/maksos070220/bmv/internal/runner"
 	"github.com/maksos070220/bmv/internal/service"
 	"github.com/maksos070220/bmv/internal/storage"
 )
@@ -27,7 +28,9 @@ func New() (*App, error) {
 
 	providers := registry.New(chromeProvider)
 
-	browserService := service.NewBrowserService(providers, downloader.New(httpClient), installer.New(), store)
+	processRunner := runner.New()
+
+	browserService := service.NewBrowserService(providers, downloader.New(httpClient), installer.New(), store, processRunner)
 
 	return &App{
 		BrowserService: browserService,
