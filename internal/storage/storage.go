@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -113,4 +114,43 @@ func (s *Storage) RemoveInstalledVersion(b browser.Browser, version string) erro
 	}
 
 	return nil
+}
+
+func (s *Storage) ExecutablePath(b browser.Browser, version string) (string, error) {
+	if !s.IsInstalled(b, version) {
+		return "", fmt.Errorf("browser %s version %s is not installed", b, version)
+	}
+
+	root := s.BrowserPath(b, version)
+
+	var relativePath string
+
+	switch b {
+	case browser.Chrome:
+		switch runtime.GOOS {
+		case "linux":
+			relativePath = "chrome-linux64/chrome"
+		case "darwin":
+			relativePath = "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+		case "windows":
+			relativePath = "chrome-win64/chrome.exe"
+		default:
+			return "", fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+		}
+	default:
+		return "", fmt.Errorf("unsupported browser: %s", b)
+	}
+
+	path := filepath.Join(root, relativePath)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("find browser executable: %w", err)
+	}
+
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("browser executable is not a regular file: %s", path)
+	}
+
+	return path, nil
 }

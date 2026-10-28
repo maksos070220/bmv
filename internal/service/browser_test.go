@@ -72,10 +72,12 @@ func (m *mockInstaller) Install(archivePath string, destination string) error {
 }
 
 type mockStorage struct {
-	root      string
-	installed bool
-	versions  []string
-	listErr   error
+	root           string
+	installed      bool
+	versions       []string
+	listErr        error
+	executablePath string
+	executableErr  error
 }
 
 func (m *mockStorage) BrowserPath(b browser.Browser, version string) string {
@@ -100,6 +102,25 @@ func (m *mockStorage) RemoveInstalledVersion(b browser.Browser, version string) 
 	}
 
 	return nil
+}
+
+func (m *mockStorage) ExecutablePath(b browser.Browser, version string) (string, error) {
+	return m.executablePath, m.executableErr
+}
+
+type mockProcessRunner struct {
+	calls      int
+	executable string
+	args       []string
+	err        error
+}
+
+func (m *mockProcessRunner) Run(ctx context.Context, executable string, args []string) error {
+	m.calls++
+	m.executable = executable
+	m.args = args
+
+	return m.err
 }
 
 func TestBrowserService_Install(t *testing.T) {
@@ -128,8 +149,9 @@ func TestBrowserService_Install(t *testing.T) {
 	storage := &mockStorage{
 		root: t.TempDir(),
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	got, err := svc.Install(ctx, browser.Chrome, "", browser.Platform{
 		OS:           "linux",
@@ -195,8 +217,9 @@ func TestBrowserService_InstallAlreadyInstalled(t *testing.T) {
 		root:      t.TempDir(),
 		installed: true,
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	got, err := svc.Install(context.Background(), browser.Chrome, "", release.Platform, nil)
 	if err != nil {
@@ -239,8 +262,9 @@ func TestBrowserService_InstallDownloadError(t *testing.T) {
 	storage := &mockStorage{
 		root: t.TempDir(),
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	_, err := svc.Install(context.Background(), browser.Chrome, "",
 		browser.Platform{
@@ -292,8 +316,9 @@ func TestBrowserService_InstallInstallerError(t *testing.T) {
 	storage := &mockStorage{
 		root: t.TempDir(),
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	_, err := svc.Install(context.Background(), browser.Chrome, "", release.Platform, nil)
 
@@ -328,8 +353,9 @@ func TestBrowserService_InstallResolveError(t *testing.T) {
 	storage := &mockStorage{
 		root: t.TempDir(),
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	_, err := svc.Install(context.Background(), browser.Chrome, "",
 		browser.Platform{
@@ -365,8 +391,9 @@ func TestBrowserService_InstallUnsupportedBrowser(t *testing.T) {
 	storage := &mockStorage{
 		root: t.TempDir(),
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	_, err := svc.Install(context.Background(), browser.Firefox, "", browser.Platform{
 		OS:           "linux",
@@ -409,8 +436,9 @@ func TestBrowserService_InstallCancelledContext(t *testing.T) {
 	storage := &mockStorage{
 		root: t.TempDir(),
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -460,8 +488,9 @@ func TestBrowserService_ListInstalledVersions(t *testing.T) {
 		root:     t.TempDir(),
 		versions: want,
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	got, err := svc.ListInstalledVersions(browser.Chrome)
 	if err != nil {
@@ -497,11 +526,111 @@ func TestBrowserService_Uninstall(t *testing.T) {
 	storage := &mockStorage{
 		root: t.TempDir(),
 	}
+	processRunner := &mockProcessRunner{}
 
-	svc := NewBrowserService(providers, downloader, installer, storage)
+	svc := NewBrowserService(providers, downloader, installer, storage, processRunner)
 
 	err := svc.Uninstall(browser.Chrome, "120.0.6099.109")
 	if err != nil {
 		t.Fatalf("Uninstall() error = %v", err)
+	}
+}
+
+func TestBrowserService_RunSuccess(t *testing.T) {
+	expectedExecutable := "/tmp/chrome"
+	expectedArgs := []string{
+		"--headless",
+		"--disable-gpu",
+		"https://example.com",
+	}
+
+	storage := &mockStorage{
+		executablePath: expectedExecutable,
+	}
+	runner := &mockProcessRunner{}
+
+	svc := NewBrowserService(nil, nil, nil, storage, runner)
+
+	err := svc.Run(context.Background(), browser.Chrome, "120.0.6099.109", expectedArgs)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if runner.calls != 1 {
+		t.Fatalf("runner calls = %d, want 1", runner.calls)
+	}
+
+	if runner.executable != expectedExecutable {
+		t.Errorf("executable = %q, want %q", runner.executable, expectedExecutable)
+	}
+
+	if !reflect.DeepEqual(runner.args, expectedArgs) {
+		t.Errorf("args = %v, want %v", runner.args, expectedArgs)
+	}
+}
+
+func TestBrowserService_RunExecutablePathError(t *testing.T) {
+	expectedErr := errors.New("browser executable not found")
+
+	storage := &mockStorage{
+		executableErr: expectedErr,
+	}
+	runner := &mockProcessRunner{}
+
+	svc := NewBrowserService(nil, nil, nil, storage, runner)
+
+	err := svc.Run(context.Background(), browser.Chrome, "120.0.6099.109", nil)
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("Run() error = %v, want wrapped %v", err, expectedErr)
+	}
+
+	if runner.calls != 0 {
+		t.Errorf("runner calls = %d, want 0", runner.calls)
+	}
+}
+
+func TestBrowserService_RunProcessError(t *testing.T) {
+	expectedErr := errors.New("failed to start browser")
+
+	storage := &mockStorage{
+		executablePath: "/tmp/chrome",
+	}
+	runner := &mockProcessRunner{
+		err: expectedErr,
+	}
+
+	svc := NewBrowserService(nil, nil, nil, storage, runner)
+
+	err := svc.Run(context.Background(), browser.Chrome, "120.0.6099.109", nil)
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("Run() error = %v, want wrapped %v", err, expectedErr)
+	}
+
+	if runner.calls != 1 {
+		t.Errorf("runner calls = %d, want 1", runner.calls)
+	}
+}
+
+func TestBrowserService_RunCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	storage := &mockStorage{
+		executablePath: "/tmp/chrome",
+	}
+	runner := &mockProcessRunner{}
+
+	svc := NewBrowserService(nil, nil, nil, storage, runner)
+
+	err := svc.Run(ctx, browser.Chrome, "120.0.6099.109", nil)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want %v", err, context.Canceled)
+	}
+
+	if runner.calls != 0 {
+		t.Errorf("runner calls = %d, want 0", runner.calls)
 	}
 }

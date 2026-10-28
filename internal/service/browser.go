@@ -23,10 +23,15 @@ type Storage interface {
 	IsInstalled(browser browser.Browser, version string) bool
 	ListInstalledVersions(b browser.Browser) ([]string, error)
 	RemoveInstalledVersion(b browser.Browser, version string) error
+	ExecutablePath(b browser.Browser, version string) (string, error)
 }
 
 type ProviderRegistry interface {
 	Get(browser.Browser) (browser.Provider, error)
+}
+
+type ProcessRunner interface {
+	Run(ctx context.Context, executable string, args []string) error
 }
 
 type BrowserService struct {
@@ -34,14 +39,16 @@ type BrowserService struct {
 	downloader Downloader
 	installer  Installer
 	storage    Storage
+	runner     ProcessRunner
 }
 
-func NewBrowserService(providers ProviderRegistry, downloader Downloader, installer Installer, storage Storage) *BrowserService {
+func NewBrowserService(providers ProviderRegistry, downloader Downloader, installer Installer, storage Storage, runner ProcessRunner) *BrowserService {
 	return &BrowserService{
 		providers:  providers,
 		downloader: downloader,
 		installer:  installer,
 		storage:    storage,
+		runner:     runner,
 	}
 }
 
@@ -99,6 +106,32 @@ func (s *BrowserService) ListInstalledVersions(b browser.Browser) ([]string, err
 func (s *BrowserService) Uninstall(b browser.Browser, version string) error {
 	if err := s.storage.RemoveInstalledVersion(b, version); err != nil {
 		return fmt.Errorf("uninstall browser: %w", err)
+	}
+
+	return nil
+}
+
+func (s *BrowserService) ExecutablePath(b browser.Browser, version string) (string, error) {
+	path, err := s.storage.ExecutablePath(b, version)
+	if err != nil {
+		return "", fmt.Errorf("get browser executable: %w", err)
+	}
+
+	return path, nil
+}
+
+func (s *BrowserService) Run(ctx context.Context, b browser.Browser, version string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("run browser: %w", err)
+	}
+
+	executable, err := s.storage.ExecutablePath(b, version)
+	if err != nil {
+		return fmt.Errorf("get browser executable: %w", err)
+	}
+
+	if err = s.runner.Run(ctx, executable, args); err != nil {
+		return fmt.Errorf("run browser: %w", err)
 	}
 
 	return nil
